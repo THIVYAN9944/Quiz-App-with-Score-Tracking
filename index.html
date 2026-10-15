@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz App with Score Tracking</title>
+<style>
+  :root { --bg:#f4f6fb; --card:#fff; --text:#1f2430; --muted:#6b7280; --primary:#4f46e5; --ok:#16a34a; --bad:#dc2626; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12141c; --card:#1c202b; --text:#eef0f6; --muted:#9aa3b5; --primary:#818cf8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, Arial, sans-serif; background:var(--bg); color:var(--text);
+         min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .card { background:var(--card); width:100%; max-width:560px; border-radius:16px; padding:24px;
+          box-shadow:0 8px 30px rgba(0,0,0,.12); }
+  h1 { margin:0 0 4px; font-size:1.6rem; }
+  .muted { color:var(--muted); font-size:.9rem; }
+  .hidden { display:none; }
+  select, button { font:inherit; }
+  select { width:100%; padding:10px; border-radius:10px; border:1px solid var(--muted); background:var(--card); color:var(--text); margin:8px 0 14px; }
+  button.primary { background:var(--primary); color:#fff; border:0; padding:12px 20px; border-radius:10px; cursor:pointer; width:100%; font-weight:600; }
+  .top { display:flex; justify-content:space-between; margin-bottom:10px; font-weight:600; }
+  .bar { height:8px; background:rgba(128,128,128,.25); border-radius:99px; overflow:hidden; margin-bottom:16px; }
+  .bar > div { height:100%; background:var(--primary); width:100%; transition:width 1s linear; }
+  .opt { display:block; width:100%; text-align:left; margin:8px 0; padding:12px 14px; border-radius:10px;
+         border:2px solid rgba(128,128,128,.35); background:transparent; color:var(--text); cursor:pointer; }
+  .opt:hover:not(:disabled) { border-color:var(--primary); }
+  .opt.correct { border-color:var(--ok); background:rgba(22,163,74,.15); }
+  .opt.wrong { border-color:var(--bad); background:rgba(220,38,38,.15); }
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:16px 0; text-align:center; }
+  .stats div { background:rgba(128,128,128,.12); border-radius:10px; padding:10px; }
+  .stats b { display:block; font-size:1.4rem; }
+  ul { padding-left:18px; } li { margin:4px 0; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- START SCREEN -->
+  <section id="start">
+    <h1>Quiz App</h1>
+    <p class="muted">Test your knowledge. Your scores are saved in this browser.</p>
+    <label>Category</label>
+    <select id="category"></select>
+    <label>Level</label>
+    <select id="level">
+      <option value="all">All levels</option>
+      <option value="easy">Easy</option>
+      <option value="medium">Medium</option>
+      <option value="hard">Hard</option>
+    </select>
+    <button class="primary" id="startBtn">Start Quiz</button>
+    <p>High score: <b id="highScore">0</b></p>
+    <h3>Last 5 attempts</h3>
+    <ul id="history"></ul>
+  </section>
+
+  <!-- QUIZ SCREEN -->
+  <section id="quiz" class="hidden">
+    <div class="top"><span id="qCount"></span><span id="timer"></span><span id="score"></span></div>
+    <div class="bar"><div id="bar"></div></div>
+    <h2 id="question"></h2>
+    <div id="options"></div>
+    <button class="primary hidden" id="nextBtn">Next</button>
+  </section>
+
+  <!-- RESULT SCREEN -->
+  <section id="result" class="hidden">
+    <h1>Quiz Finished!</h1>
+    <p id="resultMsg" class="muted"></p>
+    <div class="stats">
+      <div><b id="rScore">0</b>Score</div>
+      <div><b id="rCorrect">0</b>Correct</div>
+      <div><b id="rWrong">0</b>Wrong</div>
+    </div>
+    <button class="primary" id="againBtn">Play Again</button>
+  </section>
+
+</div>
+
+<script>
+/* ---------- 1. QUESTION BANK ---------- */
+const QUESTIONS = [
+  { cat:"General Knowledge", level:"easy",   q:"What is the capital of India?", options:["Mumbai","New Delhi","Chennai","Kolkata"], answer:1 },
+  { cat:"General Knowledge", level:"easy",   q:"How many days are in a leap year?", options:["365","364","366","367"], answer:2 },
+  { cat:"General Knowledge", level:"medium", q:"Which river is known as the 'Dakshina Ganga'?", options:["Kaveri","Vaigai","Krishna","Godavari"], answer:0 },
+  { cat:"General Knowledge", level:"hard",   q:"In which year did India become a republic?", options:["1947","1948","1950","1952"], answer:2 },
+  { cat:"Science", level:"easy",   q:"Which planet is called the Red Planet?", options:["Venus","Mars","Jupiter","Saturn"], answer:1 },
+  { cat:"Science", level:"easy",   q:"What gas do plants absorb from the air?", options:["Oxygen","Nitrogen","Carbon dioxide","Hydrogen"], answer:2 },
+  { cat:"Science", level:"medium", q:"What is the chemical symbol for Sodium?", options:["So","Na","Sd","N"], answer:1 },
+  { cat:"Science", level:"hard",   q:"What is the SI unit of electrical resistance?", options:["Volt","Ampere","Ohm","Watt"], answer:2 },
+  { cat:"Programming", level:"easy",   q:"What does HTML stand for?", options:["Hyper Text Markup Language","High Text Machine Language","Hyperlinks Text Mark Language","Home Tool Markup Language"], answer:0 },
+  { cat:"Programming", level:"easy",   q:"Which language adds interactivity to web pages?", options:["CSS","HTML","JavaScript","SQL"], answer:2 },
+  { cat:"Programming", level:"medium", q:"Which CSS property changes text color?", options:["font-color","color","text-color","fg"], answer:1 },
+  { cat:"Programming", level:"hard",   q:"What does JSON.parse() do?", options:["Converts object to string","Converts string to object","Deletes JSON","Sends JSON to server"], answer:1 },
+  { cat:"Tamil Cinema & Culture", level:"easy",   q:"Which festival is the Tamil harvest festival?", options:["Diwali","Pongal","Holi","Onam"], answer:1 },
+  { cat:"Tamil Cinema & Culture", level:"medium", q:"Who wrote the Thirukkural?", options:["Kambar","Ilango Adigal","Thiruvalluvar","Bharathiyar"], answer:2 },
+  { cat:"Tamil Cinema & Culture", level:"medium", q:"Which is the classical dance form of Tamil Nadu?", options:["Kathak","Bharatanatyam","Odissi","Kuchipudi"], answer:1 },
+];
+
+const TIME_PER_QUESTION = 15;  // seconds
+const QUESTIONS_PER_QUIZ = 5;
+
+/* ---------- 2. HELPERS ---------- */
+const $ = id => document.getElementById(id);
+const show = id => { ["start","quiz","result"].forEach(s => $(s).classList.add("hidden")); $(id).classList.remove("hidden"); };
+const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
+
+/* localStorage wrapped in try/catch so the app never breaks */
+const store = {
+  get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
+  set(key, val)      { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} }
+};
+
+/* ---------- 3. STATE ---------- */
+let list = [], index = 0, score = 0, correct = 0, wrong = 0, timeLeft = 0, tick = null, answered = false;
+
+/* ---------- 4. START SCREEN ---------- */
+function loadStart() {
+  const cats = [...new Set(QUESTIONS.map(q => q.cat))];
+  $("category").innerHTML = `<option value="all">All categories</option>` + cats.map(c => `<option>${c}</option>`).join("");
+  $("highScore").textContent = store.get("quiz_high", 0);
+  const hist = store.get("quiz_history", []);
+  $("history").innerHTML = hist.length
+    ? hist.map(h => `<li>${h.date} &mdash; ${h.category}: <b>${h.score}</b> (${h.correct}/${h.total} correct)</li>`).join("")
+    : "<li class='muted'>No attempts yet</li>";
+  show("start");
+}
+
+function startQuiz() {
+  const cat = $("category").value, lvl = $("level").value;
+  let pool = QUESTIONS.filter(q => (cat === "all" || q.cat === cat) && (lvl === "all" || q.level === lvl));
+  if (!pool.length) { alert("No questions for this combination. Try another."); return; }
+  list = shuffle(pool).slice(0, QUESTIONS_PER_QUIZ);
+  index = score = correct = wrong = 0;
+  show("quiz");
+  showQuestion();
+}
+
+/* ---------- 5. QUIZ SCREEN ---------- */
+function showQuestion() {
+  answered = false;
+  const q = list[index];
+  $("qCount").textContent = `Q ${index + 1}/${list.length}`;
+  $("score").textContent = `Score: ${score}`;
+  $("question").textContent = q.q;
+  $("nextBtn").classList.add("hidden");
+  $("options").innerHTML = "";
+  q.options.forEach((text, i) => {
+    const b = document.createElement("button");
+    b.className = "opt"; b.textContent = text;
+    b.onclick = () => selectAnswer(i);
+    $("options").appendChild(b);
+  });
+  startTimer();
+}
+
+function startTimer() {
+  clearInterval(tick);
+  timeLeft = TIME_PER_QUESTION;
+  $("bar").style.transition = "none"; $("bar").style.width = "100%";
+  setTimeout(() => { $("bar").style.transition = "width 1s linear"; }, 20);
+  $("timer").textContent = `${timeLeft}s`;
+  tick = setInterval(() => {
+    timeLeft--;
+    $("timer").textContent = `${timeLeft}s`;
+    $("bar").style.width = (timeLeft / TIME_PER_QUESTION * 100) + "%";
+    if (timeLeft <= 0) selectAnswer(-1);   // time up
+  }, 1000);
+}
+
+function selectAnswer(i) {
+  if (answered) return;
+  answered = true;
+  clearInterval(tick);
+  const q = list[index], btns = [...document.querySelectorAll(".opt")];
+  btns.forEach((b, n) => {
+    b.disabled = true;
+    if (n === q.answer) b.classList.add("correct");
+    else if (n === i) b.classList.add("wrong");
+  });
+  if (i === q.answer) {
+    correct++;
+    score += 10 + timeLeft;            // bonus points for speed
+  } else wrong++;
+  $("score").textContent = `Score: ${score}`;
+  $("nextBtn").textContent = index === list.length - 1 ? "See Result" : "Next";
+  $("nextBtn").classList.remove("hidden");
+}
+
+function next() {
+  index++;
+  index < list.length ? showQuestion() : finish();
+}
+
+/* ---------- 6. RESULT + SAVE SCORES ---------- */
+function finish() {
+  const high = store.get("quiz_high", 0);
+  const isNew = score > high;
+  if (isNew) store.set("quiz_high", score);
+
+  const hist = store.get("quiz_history", []);
+  hist.unshift({
+    date: new Date().toLocaleDateString(),
+    category: $("category").value === "all" ? "All" : $("category").value,
+    score, correct, total: list.length
+  });
+  store.set("quiz_history", hist.slice(0, 5));   // keep last 5 only
+
+  $("rScore").textContent = score;
+  $("rCorrect").textContent = correct;
+  $("rWrong").textContent = wrong;
+  $("resultMsg").textContent = isNew ? "New high score! 🎉" : `High score: ${Math.max(high, score)}`;
+  show("result");
+}
+
+/* ---------- 7. EVENTS ---------- */
+$("startBtn").onclick = startQuiz;
+$("nextBtn").onclick = next;
+$("againBtn").onclick = loadStart;
+loadStart();
+</script>
+</body>
+</html>
